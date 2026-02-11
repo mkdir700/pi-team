@@ -78,6 +78,48 @@ afterEach(() => {
 });
 
 describe("team-coordination extension", () => {
+  it("registers tool names compatible with pi API validation", () => {
+    setTeamEnv();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ allow: true, reason: "lease_active_for_resource" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+
+    const pi = new FakePi();
+    installExtension(pi);
+
+    const invalidNames = Array.from(pi.tools.keys()).filter((name) => !/^[a-zA-Z0-9_-]+$/.test(name));
+    expect(invalidNames).toEqual([]);
+  });
+
+  it("registers object JSON schemas for all tool parameters", () => {
+    setTeamEnv();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ allow: true, reason: "lease_active_for_resource" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+
+    const pi = new FakePi();
+    installExtension(pi);
+
+    const nonObjectSchemas = Array.from(pi.tools.values()).filter((tool) => {
+      const parameters = (tool as { parameters?: { type?: string } }).parameters;
+      return !parameters || parameters.type !== "object";
+    });
+
+    expect(nonObjectSchemas).toEqual([]);
+  });
+
   it("blocks write when lease is missing", async () => {
     setTeamEnv();
     vi.stubGlobal(

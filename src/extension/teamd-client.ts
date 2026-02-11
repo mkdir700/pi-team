@@ -1,9 +1,14 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { homedir } from "node:os";
+import { basename, dirname, join } from "node:path";
 
 export interface TeamdClientOptions {
   env?: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
   readFileImpl?: typeof readFile;
+  readdirImpl?: typeof readdir;
+  statImpl?: typeof stat;
 }
 
 export interface CanWriteResult {
@@ -86,6 +91,78 @@ function normalizeUrl(input: string): string {
   return input.replace(/\/+$/, "");
 }
 
+function isValidIdentifier(value: string): boolean {
+  return /^[a-zA-Z0-9._-]+$/u.test(value);
+}
+
+function sanitizeIdentifier(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]+/gu, "-").replace(/^-+|-+$/gu, "");
+}
+
+function defaultAgentId(env: NodeJS.ProcessEnv): string {
+  const fromEnv = [env.USER, env.LOGNAME, env.USERNAME].map((value) => sanitizeIdentifier(asString(value))).find(Boolean);
+  if (fromEnv) {
+    return `${fromEnv}-auto`;
+  }
+  return `agent-${process.pid}`;
+}
+
+function inferTeamIdFromRuntimePath(runtimePath: string): string {
+  if (basename(runtimePath) !== "runtime.json") {
+    return "";
+  }
+  const candidate = sanitizeIdentifier(basename(dirname(runtimePath)));
+  return isValidIdentifier(candidate) ? candidate : "";
+}
+
+function defaultTeamsWorkspaceRoot(env: NodeJS.ProcessEnv): string {
+  const configured = asString(env.PI_TEAM_WORKSPACE_ROOT);
+  if (configured) {
+    return configured;
+  }
+  return join(homedir(), ".pi", "teams");
+}
+
+async function resolveRuntimeFilePath(options: {
+  teamId: string;
+  env: NodeJS.ProcessEnv;
+  readdirImpl: typeof readdir;
+  statImpl: typeof stat;
+}): Promise<string> {
+  const workspaceRoot = defaultTeamsWorkspaceRoot(options.env);
+  if (options.teamId) {
+    return join(workspaceRoot, options.teamId, "runtime.json");
+  }
+
+  let entries: Dirent[] = [];
+  try {
+    entries = await options.readdirImpl(workspaceRoot, { withFileTypes: true, encoding: "utf8" });
+  } catch {
+    return "";
+  }
+
+  const candidates: Array<{ path: string; mtimeMs: number }> = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !isValidIdentifier(entry.name)) {
+      continue;
+    }
+
+    const runtimePath = join(workspaceRoot, entry.name, "runtime.json");
+    try {
+      const stats = await options.statImpl(runtimePath);
+      if (!stats.isFile()) {
+        continue;
+      }
+      candidates.push({ path: runtimePath, mtimeMs: stats.mtimeMs });
+    } catch {
+      continue;
+    }
+  }
+
+  candidates.sort((left, right) => right.mtimeMs - left.mtimeMs);
+  return candidates[0]?.path ?? "";
+}
+
 async function parseTokenFile(tokenFilePath: string, reader: typeof readFile): Promise<TokenFileData> {
   const raw = (await reader(tokenFilePath, "utf8")).trim();
   if (!raw) {
@@ -112,22 +189,49 @@ export function createTeamdClient(options: TeamdClientOptions = {}): TeamdClient
   const env = options.env ?? process.env;
   const fetchImpl = options.fetchImpl ?? fetch;
   const readFileImpl = options.readFileImpl ?? readFile;
+  const readdirImpl = options.readdirImpl ?? readdir;
+  const statImpl = options.statImpl ?? stat;
 
   async function discover(requireAgent: boolean): Promise<DiscoveryData | null> {
     let url = asString(env.PI_TEAMD_URL);
     let token = asString(env.PI_TEAMD_TOKEN);
-    const teamId = asString(env.PI_TEAM_ID);
-    const agentId = asString(env.PI_AGENT_ID);
+    let teamId = asString(env.PI_TEAM_ID);
+    let agentId = asString(env.PI_AGENT_ID);
 
     const tokenFile = asString(env.PI_TEAMD_TOKEN_FILE);
-    if ((!token || !url) && tokenFile) {
+    if ((!token || !url || !teamId) && tokenFile) {
       try {
         const fromFile = await parseTokenFile(tokenFile, readFileImpl);
         token ||= fromFile.token ?? "";
         url ||= fromFile.url ?? "";
+        teamId ||= inferTeamIdFromRuntimePath(tokenFile);
       } catch {
-        return null;
+        // fall through to automatic discovery
       }
+    }
+
+    if (!url || !token || !teamId) {
+      const runtimePath = await resolveRuntimeFilePath({
+        teamId,
+        env,
+        readdirImpl,
+        statImpl,
+      });
+
+      if (runtimePath) {
+        try {
+          const fromRuntimeFile = await parseTokenFile(runtimePath, readFileImpl);
+          token ||= fromRuntimeFile.token ?? "";
+          url ||= fromRuntimeFile.url ?? "";
+          teamId ||= inferTeamIdFromRuntimePath(runtimePath);
+        } catch {
+          // keep existing values; final validation below decides availability
+        }
+      }
+    }
+
+    if (!agentId) {
+      agentId = defaultAgentId(env);
     }
 
     if (!url || !token || !teamId) {

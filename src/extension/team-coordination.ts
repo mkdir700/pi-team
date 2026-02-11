@@ -7,6 +7,7 @@ export type ExtensionContextLike = ExtensionContext;
 
 interface LocalToolDefinition {
   name: string;
+  label: string;
   description: string;
   parameters: Record<string, unknown>;
   execute: (
@@ -98,16 +99,44 @@ function blocked(reason: string): ToolCallBlockResult {
   };
 }
 
+function schemaString(): Record<string, unknown> {
+  return { type: "string" };
+}
+
+function schemaNumber(): Record<string, unknown> {
+  return { type: "number" };
+}
+
+function schemaStringArray(): Record<string, unknown> {
+  return { type: "array", items: { type: "string" } };
+}
+
+function objectSchema(
+  properties: Record<string, unknown>,
+  required: string[] = [],
+): { type: "object"; properties: Record<string, unknown>; required?: string[]; additionalProperties: false } {
+  return {
+    type: "object",
+    properties,
+    ...(required.length ? { required } : {}),
+    additionalProperties: false,
+  };
+}
+
 function registerTools(pi: ExtensionAPILike, client: TeamdClient): void {
   pi.registerTool({
-    name: "team.tasks.create",
+    name: "team_tasks_create",
+    label: "team_tasks_create",
     description: "Create a team task.",
-    parameters: {
-      title: "string",
-      description: "string?",
-      deps: "string[]?",
-      resources: "string[]?",
-    },
+    parameters: objectSchema(
+      {
+        title: schemaString(),
+        description: schemaString(),
+        deps: schemaStringArray(),
+        resources: schemaStringArray(),
+      },
+      ["title"],
+    ),
     execute: async (_toolCallId, params) => {
       const result = await client.createTask({
         title: asString(params.title),
@@ -120,12 +149,16 @@ function registerTools(pi: ExtensionAPILike, client: TeamdClient): void {
   });
 
   pi.registerTool({
-    name: "team.tasks.claim",
+    name: "team_tasks_claim",
+    label: "team_tasks_claim",
     description: "Claim a team task lease.",
-    parameters: {
-      taskId: "string",
-      ttlMs: "number?",
-    },
+    parameters: objectSchema(
+      {
+        taskId: schemaString(),
+        ttlMs: schemaNumber(),
+      },
+      ["taskId"],
+    ),
     execute: async (_toolCallId, params) => {
       const result = await client.claimTask(asString(params.taskId), asNumber(params.ttlMs) || undefined);
       return buildToolResult(result);
@@ -133,12 +166,16 @@ function registerTools(pi: ExtensionAPILike, client: TeamdClient): void {
   });
 
   pi.registerTool({
-    name: "team.tasks.complete",
+    name: "team_tasks_complete",
+    label: "team_tasks_complete",
     description: "Complete a claimed task.",
-    parameters: {
-      taskId: "string",
-      epoch: "number",
-    },
+    parameters: objectSchema(
+      {
+        taskId: schemaString(),
+        epoch: schemaNumber(),
+      },
+      ["taskId", "epoch"],
+    ),
     execute: async (_toolCallId, params) => {
       const result = await client.completeTask(asString(params.taskId), asNumber(params.epoch));
       return buildToolResult(result);
@@ -146,12 +183,16 @@ function registerTools(pi: ExtensionAPILike, client: TeamdClient): void {
   });
 
   pi.registerTool({
-    name: "team.tasks.fail",
+    name: "team_tasks_fail",
+    label: "team_tasks_fail",
     description: "Fail a claimed task.",
-    parameters: {
-      taskId: "string",
-      epoch: "number",
-    },
+    parameters: objectSchema(
+      {
+        taskId: schemaString(),
+        epoch: schemaNumber(),
+      },
+      ["taskId", "epoch"],
+    ),
     execute: async (_toolCallId, params) => {
       const result = await client.failTask(asString(params.taskId), asNumber(params.epoch));
       return buildToolResult(result);
@@ -159,9 +200,10 @@ function registerTools(pi: ExtensionAPILike, client: TeamdClient): void {
   });
 
   pi.registerTool({
-    name: "team.tasks.list",
+    name: "team_tasks_list",
+    label: "team_tasks_list",
     description: "List team tasks.",
-    parameters: {},
+    parameters: objectSchema({}),
     execute: async () => {
       const result = await client.listTasks();
       return buildToolResult(result);
@@ -169,13 +211,14 @@ function registerTools(pi: ExtensionAPILike, client: TeamdClient): void {
   });
 
   pi.registerTool({
-    name: "team.threads.start",
+    name: "team_threads_start",
+    label: "team_threads_start",
     description: "Start a team thread.",
-    parameters: {
-      title: "string?",
-      participants: "string[]?",
-      taskId: "string?",
-    },
+    parameters: objectSchema({
+      title: schemaString(),
+      participants: schemaStringArray(),
+      taskId: schemaString(),
+    }),
     execute: async (_toolCallId, params) => {
       const result = await client.startThread({
         title: asString(params.title),
@@ -187,12 +230,16 @@ function registerTools(pi: ExtensionAPILike, client: TeamdClient): void {
   });
 
   pi.registerTool({
-    name: "team.threads.post",
+    name: "team_threads_post",
+    label: "team_threads_post",
     description: "Post a message into a team thread.",
-    parameters: {
-      threadId: "string",
-      message: "string",
-    },
+    parameters: objectSchema(
+      {
+        threadId: schemaString(),
+        message: schemaString(),
+      },
+      ["threadId", "message"],
+    ),
     execute: async (_toolCallId, params) => {
       const result = await client.postThreadMessage(asString(params.threadId), {
         message: asString(params.message),
@@ -202,12 +249,16 @@ function registerTools(pi: ExtensionAPILike, client: TeamdClient): void {
   });
 
   pi.registerTool({
-    name: "team.threads.readTail",
+    name: "team_threads_read_tail",
+    label: "team_threads_read_tail",
     description: "Read thread tail.",
-    parameters: {
-      threadId: "string",
-      limit: "number?",
-    },
+    parameters: objectSchema(
+      {
+        threadId: schemaString(),
+        limit: schemaNumber(),
+      },
+      ["threadId"],
+    ),
     execute: async (_toolCallId, params) => {
       const result = await client.readThreadTail(asString(params.threadId), asNumber(params.limit) || undefined);
       return buildToolResult(result);
@@ -215,11 +266,15 @@ function registerTools(pi: ExtensionAPILike, client: TeamdClient): void {
   });
 
   pi.registerTool({
-    name: "team.threads.search",
+    name: "team_threads_search",
+    label: "team_threads_search",
     description: "Search team threads.",
-    parameters: {
-      query: "string",
-    },
+    parameters: objectSchema(
+      {
+        query: schemaString(),
+      },
+      ["query"],
+    ),
     execute: async (_toolCallId, params) => {
       const result = await client.searchThreads(asString(params.query));
       return buildToolResult(result);
@@ -227,12 +282,16 @@ function registerTools(pi: ExtensionAPILike, client: TeamdClient): void {
   });
 
   pi.registerTool({
-    name: "team.threads.linkToTask",
+    name: "team_threads_link_to_task",
+    label: "team_threads_link_to_task",
     description: "Link a thread to a task.",
-    parameters: {
-      threadId: "string",
-      taskId: "string",
-    },
+    parameters: objectSchema(
+      {
+        threadId: schemaString(),
+        taskId: schemaString(),
+      },
+      ["threadId", "taskId"],
+    ),
     execute: async (_toolCallId, params) => {
       const result = await client.linkThreadToTask(asString(params.threadId), asString(params.taskId));
       return buildToolResult(result);

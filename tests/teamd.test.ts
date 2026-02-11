@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -119,6 +119,32 @@ describe("teamd", () => {
         port: 0,
       }),
     ).rejects.toThrow(/already running|lock/i);
+  });
+
+  it("recovers from stale lock when lock holder pid is no longer alive", async () => {
+    const workspaceRoot = await createTempDir();
+    const teamId = "stale-lock-team";
+    const teamDir = join(workspaceRoot, teamId);
+    await mkdir(teamDir, { recursive: true });
+
+    const lockPath = join(teamDir, ".teamd.lock");
+    await writeFile(
+      lockPath,
+      `${JSON.stringify({ pid: 999999, startedAt: new Date().toISOString(), schemaVersion: "1.0.0" })}\n`,
+      "utf8",
+    );
+
+    const server = await startTeamd({
+      teamId,
+      workspaceRoot,
+      token: "stale-lock-token",
+      port: 0,
+    });
+    runningServers.push(server);
+
+    const lockContent = await readFile(lockPath, "utf8");
+    expect(lockContent).toContain(`"pid":${process.pid}`);
+    expect(lockContent).toContain('"schemaVersion":"1.0.0"');
   });
 
   it("supports createTask idempotency via Idempotency-Key", async () => {

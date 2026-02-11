@@ -71,6 +71,30 @@ npm run demo:crash-recovery
 
 `pi-team` 提供了一个配套扩展，用于在 Agent 环境中注册协作工具并实施写入拦截。
 
+### 零手动环境变量（推荐）
+
+从当前版本开始，扩展支持自动发现 `teamd` 连接信息：
+
+1. 启动 `teamd`（会写入 `runtime.json`）。
+2. 安装扩展到 `pi` 的扩展目录。
+3. 直接启动 `pi`，无需手动 `export PI_*`。
+
+示例：
+
+```bash
+# 1) 启动 teamd（默认会写到 ~/.pi/teams/<teamId>/runtime.json）
+npm run teamd:start -- --team default --json
+
+# 2) 安装扩展（全局）
+mkdir -p ~/.pi/agent/extensions/
+cp dist/extension/index.js ~/.pi/agent/extensions/team-coordination.js
+
+# 3) 启动 pi（扩展会自动发现 runtime）
+pi
+```
+
+如需使用非默认团队目录，可设置 `PI_TEAM_WORKSPACE_ROOT` 指向你的 teams 根目录。
+
 详细安装与配置请参考：[Extension 指南](docs/extension.md)
 
 ## 故障排查与限制
@@ -79,4 +103,4 @@ npm run demo:crash-recovery
 
 ## 许可证
 
-ISC
+MIT

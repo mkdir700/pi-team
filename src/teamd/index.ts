@@ -36,6 +36,10 @@ interface TeamdLockHandle {
   release(): Promise<void>;
 }
 
+interface TeamdLockInfo {
+  pid?: number;
+}
+
 function defaultWorkspaceRoot(): string {
   return join(homedir(), ".pi", "teams");
 }
@@ -55,28 +59,41 @@ function assertTeamId(teamId: string): string {
 async function acquireLock(lockPath: string): Promise<TeamdLockHandle> {
   let lockHandle: FileHandle | null = null;
 
-  try {
-    lockHandle = await fs.open(lockPath, "wx", 0o600);
-    await lockHandle.writeFile(
-      `${JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString(), schemaVersion: SCHEMA_VERSION })}\n`,
-      "utf8",
-    );
-    await lockHandle.sync();
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-      throw error;
-    }
-
-    let lockInfo = "unknown";
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      lockInfo = (await fs.readFile(lockPath, "utf8")).trim() || "unknown";
-    } catch {
-      lockInfo = "unknown";
-    }
+      lockHandle = await fs.open(lockPath, "wx", 0o600);
+      await lockHandle.writeFile(
+        `${JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString(), schemaVersion: SCHEMA_VERSION })}\n`,
+        "utf8",
+      );
+      await lockHandle.sync();
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
 
-    throw new Error(
-      `teamd is already running for this team (lock file exists: ${lockPath}, holder: ${lockInfo}).`,
-    );
+      let lockInfo = "unknown";
+      try {
+        lockInfo = (await fs.readFile(lockPath, "utf8")).trim() || "unknown";
+      } catch {
+        lockInfo = "unknown";
+      }
+
+      const parsed = tryParseLockInfo(lockInfo);
+      if (attempt === 0 && isStalePid(parsed.pid)) {
+        await fs.rm(lockPath, { force: true });
+        continue;
+      }
+
+      throw new Error(
+        `teamd is already running for this team (lock file exists: ${lockPath}, holder: ${lockInfo}).`,
+      );
+    }
+  }
+
+  if (!lockHandle) {
+    throw new Error(`failed to acquire teamd lock at ${lockPath}`);
   }
 
   return {
@@ -87,6 +104,36 @@ async function acquireLock(lockPath: string): Promise<TeamdLockHandle> {
       await fs.rm(lockPath, { force: true });
     },
   };
+}
+
+function tryParseLockInfo(lockInfo: string): TeamdLockInfo {
+  if (!lockInfo || lockInfo === "unknown") {
+    return {};
+  }
+
+  try {
+    return JSON.parse(lockInfo) as TeamdLockInfo;
+  } catch {
+    return {};
+  }
+}
+
+function isStalePid(pid: number | undefined): boolean {
+  if (!Number.isInteger(pid) || (pid as number) <= 0) {
+    return false;
+  }
+
+  try {
+    process.kill(pid as number, 0);
+    return false;
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code === "ESRCH") {
+      return true;
+    }
+
+    return false;
+  }
 }
 
 export async function startTeamd(options: StartTeamdOptions): Promise<TeamdHandle> {
