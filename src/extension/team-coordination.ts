@@ -1,35 +1,26 @@
 import { createTeamdClient, type InboxEvent, type TeamdClient } from "./teamd-client.js";
+import type { ExtensionAPI, ExtensionContext, ToolCallEvent } from "@mariozechner/pi-coding-agent";
 
-export interface ToolCallEventLike {
-  toolName: string;
-  input: Record<string, unknown>;
-}
+export type ToolCallEventLike = ToolCallEvent;
 
-export interface ExtensionContextLike {
-  hasUI: boolean;
-  ui?: {
-    notify(message: string, level?: "info" | "warning" | "error" | "success"): void;
-  };
-}
+export type ExtensionContextLike = ExtensionContext;
 
-interface ToolDefinition {
+interface LocalToolDefinition {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
   execute: (
     toolCallId: string,
     params: Record<string, unknown>,
-    signal: AbortSignal,
-    onUpdate: (payload: unknown) => void,
-    ctx: ExtensionContextLike,
+    signal: AbortSignal | undefined,
+    onUpdate: ((payload: unknown) => void) | undefined,
+    ctx: ExtensionContext,
   ) => Promise<unknown>;
 }
 
-export interface ExtensionAPILike {
-  registerTool(definition: ToolDefinition): void;
-  on(eventName: string, handler: (...args: unknown[]) => unknown): void;
-  sendMessage(message: { content: string; customType?: string; display?: boolean }, options?: Record<string, unknown>): void;
-}
+export type ExtensionAPILike = Pick<ExtensionAPI, "on" | "sendMessage"> & {
+  registerTool(definition: LocalToolDefinition): void;
+};
 
 export interface TeamCoordinationOptions {
   inboxPollIntervalMs?: number;
@@ -39,13 +30,13 @@ export interface TeamCoordinationOptions {
   readFileImpl?: typeof import("node:fs/promises").readFile;
 }
 
+const GUARDED_TOOL_NAMES = new Set(["write", "edit", "bash"]);
+const DEFAULT_INBOX_POLL_INTERVAL_MS = 15_000;
+
 interface ToolCallBlockResult {
   block: true;
   reason: string;
 }
-
-const GUARDED_TOOL_NAMES = new Set(["write", "edit", "bash"]);
-const DEFAULT_INBOX_POLL_INTERVAL_MS = 15_000;
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -74,12 +65,13 @@ function buildToolResult(value: unknown): { content: Array<{ type: "text"; text:
 }
 
 function extractTargetPath(event: ToolCallEventLike): string {
+  const input = event.input as Record<string, unknown>;
   if (event.toolName === "write" || event.toolName === "edit") {
-    return asString(event.input.filePath) || asString(event.input.path) || ".";
+    return asString(input.filePath) || asString(input.path) || ".";
   }
 
   if (event.toolName === "bash") {
-    return asString(event.input.path) || ".";
+    return asString(input.path) || ".";
   }
 
   return ".";
@@ -92,45 +84,11 @@ function summarizeInboxEvent(event: InboxEvent): string {
   return summary.replace(/\s+/g, " ").replace(/[\r\n]+/g, " ").trim();
 }
 
-function resolveToolCallArgs(args: unknown[]): { ctx: ExtensionContextLike | null; event: ToolCallEventLike | null } {
-  const [first, second] = args;
-  if (first && typeof first === "object" && "toolName" in (first as Record<string, unknown>)) {
-    return {
-      event: first as ToolCallEventLike,
-      ctx: (second as ExtensionContextLike | undefined) ?? null,
-    };
-  }
-
-  if (second && typeof second === "object" && "toolName" in (second as Record<string, unknown>)) {
-    return {
-      event: second as ToolCallEventLike,
-      ctx: (first as ExtensionContextLike | undefined) ?? null,
-    };
-  }
-
-  return {
-    event: null,
-    ctx: null,
-  };
-}
-
-function resolveContext(args: unknown[]): ExtensionContextLike {
-  const first = args[0] as ExtensionContextLike | undefined;
-  const second = args[1] as ExtensionContextLike | undefined;
-  if (first && typeof first.hasUI === "boolean") {
-    return first;
-  }
-  if (second && typeof second.hasUI === "boolean") {
-    return second;
-  }
-  return { hasUI: false };
-}
-
-function notifyIfPossible(ctx: ExtensionContextLike | null, message: string): void {
-  if (!ctx?.hasUI) {
+function notifyIfPossible(ctx: ExtensionContextLike, message: string): void {
+  if (!ctx.hasUI) {
     return;
   }
-  ctx.ui?.notify(message, "warning");
+  ctx.ui.notify(message, "warning");
 }
 
 function blocked(reason: string): ToolCallBlockResult {
@@ -322,17 +280,15 @@ export function registerTeamCoordinationExtension(pi: ExtensionAPILike, options:
     sinceCursor = inbox.nextSince ?? sinceCursor;
   };
 
-  pi.on("session_start", async (...args: unknown[]) => {
-    resolveContext(args);
+  pi.on("session_start", async () => {
     await pollInbox();
     setInterval(() => {
       void pollInbox();
     }, pollIntervalMs);
   });
 
-  pi.on("tool_call", async (...args: unknown[]) => {
-    const { ctx, event } = resolveToolCallArgs(args);
-    if (!ctx || !event || !GUARDED_TOOL_NAMES.has(event.toolName)) {
+  pi.on("tool_call", async (event, ctx) => {
+    if (!GUARDED_TOOL_NAMES.has(event.toolName)) {
       return;
     }
 

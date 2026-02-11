@@ -24,8 +24,9 @@ interface TestContext {
   };
 }
 
-type ToolCallHandler = (ctx: TestContext, event: ToolCallEvent) => Promise<BlockResult>;
-type SessionStartHandler = (ctx: TestContext) => Promise<void>;
+type ToolCallEventEnvelope = ToolCallEvent & { type?: "tool_call"; toolCallId?: string };
+type SessionStartHandler = (event: { type: "session_start" }, ctx: TestContext) => Promise<void>;
+type ToolCallHandler = (event: ToolCallEventEnvelope, ctx: TestContext) => Promise<BlockResult>;
 
 class FakePi {
   readonly handlers = new Map<string, (...args: unknown[]) => unknown>();
@@ -94,10 +95,13 @@ describe("team-coordination extension", () => {
     const handler = pi.handlers.get("tool_call") as ToolCallHandler;
     const ctx = makeContext(true);
 
-    const result = await handler(ctx, {
+    const result = await handler(
+      {
       toolName: "write",
       input: { filePath: "src/x.ts", content: "x" },
-    });
+      },
+      ctx,
+    );
 
     expect(result).toEqual({ block: true, reason: expect.stringMatching(/lease/i) });
   });
@@ -119,10 +123,13 @@ describe("team-coordination extension", () => {
     const handler = pi.handlers.get("tool_call") as ToolCallHandler;
     const ctx = makeContext(true);
 
-    const result = await handler(ctx, {
+    const result = await handler(
+      {
       toolName: "edit",
       input: { filePath: "src/x.ts", oldText: "a", newText: "b" },
-    });
+      },
+      ctx,
+    );
 
     expect(result).toEqual({ block: true, reason: expect.stringMatching(/lease/i) });
   });
@@ -144,10 +151,13 @@ describe("team-coordination extension", () => {
     const handler = pi.handlers.get("tool_call") as ToolCallHandler;
     const ctx = makeContext(true);
 
-    const result = await handler(ctx, {
+    const result = await handler(
+      {
       toolName: "bash",
       input: { command: "touch src/x.ts" },
-    });
+      },
+      ctx,
+    );
 
     expect(result).toEqual({ block: true, reason: expect.stringMatching(/lease/i) });
     expect(ctx.ui.notify).toHaveBeenCalled();
@@ -191,7 +201,7 @@ describe("team-coordination extension", () => {
     installExtension(pi, { inboxPollIntervalMs: 5000 });
     const sessionStart = pi.handlers.get("session_start") as SessionStartHandler;
 
-    await sessionStart(makeContext(true));
+    await sessionStart({ type: "session_start" }, makeContext(true));
 
     expect(pi.notifications).toHaveLength(1);
     expect(pi.notifications[0]?.content).toMatch(/^INBOX: task_completed task-001 by worker_a$/);
@@ -218,10 +228,13 @@ describe("team-coordination extension", () => {
     installExtension(pi);
     const handler = pi.handlers.get("tool_call") as ToolCallHandler;
 
-    const result = await handler(makeContext(false), {
+    const result = await handler(
+      {
       toolName: "write",
       input: { filePath: "src/x.ts", content: "x" },
-    });
+      },
+      makeContext(false),
+    );
 
     expect(result).toEqual({ block: true, reason: expect.stringMatching(/ui|lease|conservative/i) });
   });
