@@ -1,0 +1,9 @@
+{
+  "status": 403,
+  "body": {
+    "error": {
+      "code": "LEASE_EXPIRED",
+      "message": "Lease for task task-0001 has expired."
+    }
+  }
+}

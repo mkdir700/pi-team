@@ -1,0 +1,2 @@
+{"schemaVersion":"1.0.0","id":"msg-cb249e64-2fd7-4b67-aed8-c7d5e69a5e7c","threadId":"thread-0001","from":"agentA","body":"Please pick up task implementation.","ts":"2026-02-10T17:09:55.463Z"}
+{"schemaVersion":"1.0.0","id":"msg-d9c2918f-dc53-499e-813f-36b5408f975e","threadId":"thread-0001","from":"agentB","body":"Acknowledged. I will complete it now.","ts":"2026-02-10T17:09:55.502Z"}

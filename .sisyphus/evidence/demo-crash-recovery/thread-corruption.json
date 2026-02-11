@@ -1,0 +1,5 @@
+{
+  "threadId": "thread-0001",
+  "threadFilePath": "/Users/mark/MyProjects/pi-team/.sisyphus/evidence/demo-workspace/crash-recovery/demo-crash-team/threads/thread-0001.jsonl",
+  "note": "Appended a truncated JSONL line to simulate crash-interrupted append."
+}

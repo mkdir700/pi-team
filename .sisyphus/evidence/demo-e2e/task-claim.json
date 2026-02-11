@@ -1,0 +1,31 @@
+{
+  "task": {
+    "schemaVersion": "1.0.0",
+    "id": "task-0001",
+    "title": "demo e2e task",
+    "description": "claim and complete from agentB",
+    "status": "in_progress",
+    "owner": "agentB",
+    "deps": [],
+    "resources": [
+      "src/demo"
+    ],
+    "lease": {
+      "holder": "agentB",
+      "epoch": 1,
+      "expiresAt": "2026-02-10T17:10:25.550Z"
+    },
+    "epoch": 1,
+    "timestamps": {
+      "createdAt": "2026-02-10T17:09:55.535Z",
+      "startedAt": "2026-02-10T17:09:55.550Z",
+      "completedAt": null,
+      "failedAt": null
+    }
+  },
+  "lease": {
+    "holder": "agentB",
+    "epoch": 1,
+    "expiresAt": "2026-02-10T17:10:25.550Z"
+  }
+}

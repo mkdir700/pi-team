@@ -1,0 +1,34 @@
+{
+  "status": 200,
+  "body": {
+    "task": {
+      "schemaVersion": "1.0.0",
+      "id": "task-0001",
+      "title": "lease-expiry-after-restart",
+      "description": "",
+      "status": "in_progress",
+      "owner": "agentB",
+      "deps": [],
+      "resources": [
+        "src/demo"
+      ],
+      "lease": {
+        "holder": "agentB",
+        "epoch": 2,
+        "expiresAt": "2026-02-10T17:10:01.799Z"
+      },
+      "epoch": 2,
+      "timestamps": {
+        "createdAt": "2026-02-10T17:09:56.490Z",
+        "startedAt": "2026-02-10T17:09:56.506Z",
+        "completedAt": null,
+        "failedAt": null
+      }
+    },
+    "lease": {
+      "holder": "agentB",
+      "epoch": 2,
+      "expiresAt": "2026-02-10T17:10:01.799Z"
+    }
+  }
+}

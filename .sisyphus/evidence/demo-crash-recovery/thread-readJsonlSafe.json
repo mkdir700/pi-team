@@ -1,0 +1,14 @@
+{
+  "threadId": "thread-0001",
+  "lineCount": 1,
+  "lines": [
+    {
+      "schemaVersion": "1.0.0",
+      "id": "msg-cbf90b68-438f-4239-9725-40ad9e4bf0a7",
+      "threadId": "thread-0001",
+      "from": "agentA",
+      "body": "message before simulated crash",
+      "ts": "2026-02-10T17:09:56.449Z"
+    }
+  ]
+}

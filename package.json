@@ -1,0 +1,44 @@
+{
+  "name": "pi-team",
+  "version": "1.0.0",
+  "description": "pi-team runtime scaffold",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "pi-team": "./dist/bin/pi-team.js",
+    "teamd": "./dist/bin/teamd.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./teamd": "./dist/teamd/index.js",
+    "./extension": "./dist/extension/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "teamd:start": "npm run build && node dist/bin/teamd.js",
+    "demo:e2e": "npm run build && node dist/demo/e2e.js",
+    "demo:crash-recovery": "npm run build && node dist/demo/crash-recovery.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mkdir700/pi-team.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/mkdir700/pi-team/issues"
+  },
+  "homepage": "https://github.com/mkdir700/pi-team#readme",
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
